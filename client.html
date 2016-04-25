@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Time Sync Demo</title>
+</head>
+<body>
+    <p>Delay: <input type='text' id='delay' value='3000' /></p>
+    <p>Action: <input type='text' id='action' /></p>
+    <p><input type='button' id='go' value='Go !' /></p>
+    <p>Connection: <span id='connection'></span></p>
+    <p>Offset: <span id='offset'></span></p>
+    <div id='message'></div>
+    <script src='https://cdn.socket.io/socket.io-1.4.5.js'></script>
+    <script>
+        // connect to the server
+        var socket = io(window.location.origin);
+
+        var connection = -1;
+        var offset = undefined;
+
+        // update connection counting
+        socket.on('connect', function () {
+            connection += 1;
+
+            // show the connection counting
+            document.getElementById('connection').innerHTML = connection;
+        });
+
+        // keep updating offset
+        var updateOffset = function () {
+            var c1 = connection;
+            var t1 = Date.now();
+
+            socket.emit('sync', undefined, function (res) {
+                var c2 = connection;
+                var t2 = Date.now();
+
+                // timeout
+                if (c2 !== c1 || t2 - t1 > 2000) {
+                    return;
+                }
+
+                // calculate the time offset
+                var new_offset = (t1 + t2) / 2 - res;
+                if (offset === undefined) {
+                    offset = Math.round(new_offset);
+                } else {
+                    // smooth updating
+                    offset = Math.round(0.8 * offset + 0.2 * new_offset);
+                }
+
+                // show the offset
+                document.getElementById('offset').innerHTML = offset;
+            });
+        };
+        setInterval(updateOffset, 500);
+
+        // emit actions
+        document.getElementById('go').onclick = function () {
+            socket.emit('broadcast', {
+                delay: parseInt(document.getElementById('delay').value),
+                action: document.getElementById('action').value,
+            });
+        };
+
+        // handle broadcasted actions
+        socket.on('broadcast', function (res) {
+            var t1 = Date.now();
+
+            // calculate the target timestamp and delay
+            setTimeout(function () {
+                var t2 = Date.now();
+
+                document.getElementById('message').innerHTML += (
+                    '<p>Action: ' + res.action + ' - ' + new Date(t2) + '</p>'
+                );
+            }, res.timestamp + offset - t1);
+
+            // show the scheduled action
+            document.getElementById('message').innerHTML += (
+                '<p>Now: ' + new Date(t1) + '</p>'
+            );
+            document.getElementById('message').innerHTML += (
+                '<p>Scheduled: ' + res.action + ' - ' + new Date(res.timestamp + offset) + '</p>'
+            );
+        });
+    </script>
+</body>
+</html>
